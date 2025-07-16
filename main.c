@@ -15,16 +15,19 @@ int fps;
 Camera3D gameCamera;
 
 float playerSpeed;
+float playerWeight;
+float playerJumpPower;
+bool IsPlayerJumping;
+float playerYVel;
 float playerRotateSpeed;
 Vector3 playerSize;
 Vector3 playerPreviousPosition;
 BoundingBox playerBoundingBox;
-bool xCollision;
-bool zCollision;
 
+float gravity;
 int worldBoxAmount;
 int worldBoxSize;
-BoundingBox worldBoxes[20];
+BoundingBox worldBoxes[10];
 
 int main(void) {
 
@@ -44,12 +47,17 @@ int main(void) {
   gameCamera.fovy = 90.0f;
   gameCamera.projection = CAMERA_PERSPECTIVE;
 
-  playerSpeed = 30;
-  playerRotateSpeed = 200;
+  playerSpeed = 50;
+  playerWeight = 0.3;
+  playerJumpPower = 1;
+  IsPlayerJumping = false;
+  playerYVel = 0;
+  playerRotateSpeed = 230;
   playerSize = (Vector3){ 2, 6, 2 };
   playerPreviousPosition = gameCamera.position;
 
-  worldBoxAmount = 20;
+  gravity = 9.81;
+  worldBoxAmount = 10;
   worldBoxSize = 10;
   for (int i = 0; i < worldBoxAmount; i++) {
     int x = GetRandomValue(-50, 50 - worldBoxSize);
@@ -70,7 +78,7 @@ int main(void) {
     playerPreviousPosition = gameCamera.position;
 
     UpdateCameraPro(&gameCamera,
-                    (Vector3){(IsKeyDown(KEY_W) - IsKeyDown(KEY_S)) * (playerSpeed * deltaTime), 0, 0 },
+                    (Vector3){(IsKeyDown(KEY_W) - IsKeyDown(KEY_S)) * (playerSpeed * deltaTime), 0, playerYVel },
                     (Vector3){(IsKeyDown(KEY_D) - IsKeyDown(KEY_A)) * (playerRotateSpeed * deltaTime), 0, 0 },
                     0.0f);
 
@@ -84,13 +92,24 @@ int main(void) {
                             gameCamera.position.y + 0.5,
                             gameCamera.position.z + playerSize.z / 2 };
 
-    xCollision = false;
-    zCollision = false;
-
+    // Have we collided with a box?
+    // If so don't move
     for (int i = 0; i < worldBoxAmount; i++) {
       if (CheckCollisionBoxes(playerBoundingBox, worldBoxes[i])) {
         gameCamera.position = playerPreviousPosition;
       }
+    }
+
+    IsPlayerJumping = IsKeyPressed(KEY_SPACE);
+
+    if (IsPlayerJumping) {
+      playerYVel = playerYVel + playerJumpPower;
+    } else if (playerBoundingBox.min.y < 0.1) {
+      playerYVel = 0;
+      gameCamera.position.y = 5.5;
+      gameCamera.target.y = 5.5;
+    } else {
+      playerYVel = playerYVel - (gravity * playerWeight * deltaTime);
     }
 
     // Rendering
@@ -108,8 +127,10 @@ int main(void) {
         DrawBoundingBox(worldBoxes[i], SKYBLUE);
       }
       EndMode3D();
-    DrawText("Move With WASD", 10, 415, 25, RAYWHITE);
-    DrawText(TextFormat("%i", fps), 10, 10, 25, RAYWHITE);
+    DrawText("Move With WASD, Jump With Space", 10, 415, 25, RAYWHITE);
+    DrawText(TextFormat("%d", fps), 10, 10, 25, RAYWHITE);
+    DrawText(TextFormat("%f", playerYVel), 10, 35, 25, RAYWHITE);
+    DrawText(TextFormat("%f", playerBoundingBox.min.y), 10, 60, 25, RAYWHITE);
     EndDrawing();
   }
 
