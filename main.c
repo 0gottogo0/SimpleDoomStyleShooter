@@ -22,12 +22,14 @@ float playerYVel;
 float playerRotateSpeed;
 Vector3 playerSize;
 Vector3 playerPreviousPosition;
+Vector3 playerTargetPreviousPosition;
 BoundingBox playerBoundingBox;
 
 bool xnCollsion;
 bool xpCollsion;
 bool znCollsion;
 bool zpCollsion;
+int previousCollisonState;
 float disX;
 float disZ;
 
@@ -62,11 +64,13 @@ int main(void) {
   playerRotateSpeed = 230;
   playerSize = (Vector3){ 2, 6, 2 };
   playerPreviousPosition = gameCamera.position;
+  playerTargetPreviousPosition = gameCamera.target;
 
   xnCollsion = false;
   xpCollsion = false;
   znCollsion = false;
   zpCollsion = false;
+  previousCollisonState = 1;
   disX = 0;
   disZ = 0;
 
@@ -94,8 +98,8 @@ int main(void) {
     deltaTime = GetFrameTime();
     fps = GetFPS();
 
-    playerPreviousPosition.x = gameCamera.position.x;
-    playerPreviousPosition.z = gameCamera.position.z;
+    playerPreviousPosition = gameCamera.position;
+    playerTargetPreviousPosition = gameCamera.target; // If the camera moves lets move the camera target too ;)
 
     UpdateCameraPro(&gameCamera,
                     (Vector3){(IsKeyDown(KEY_W) - IsKeyDown(KEY_S)) * (playerSpeed * deltaTime), 0, playerYVel * deltaTime },
@@ -156,19 +160,43 @@ int main(void) {
           disX = fabs(gameCamera.position.x - (worldBoxes[i].min.x + (worldBoxSize / 2)));
           disZ = fabs(gameCamera.position.z - (worldBoxes[i].min.z + (worldBoxSize / 2)));
 
+          // Sliding on X
           if (disX > disZ) {
             znCollsion = false;
             zpCollsion = false;
-          } else {
+            gameCamera.position.x = playerPreviousPosition.x;
+            gameCamera.target.x = playerTargetPreviousPosition.x;
+            if (xnCollsion) {
+              // PreviousCameraPositionBeforeConerFix is used to set the camera target
+              int previousCameraPositionBeforeConerFix = gameCamera.position.x;
+              gameCamera.position.x = worldBoxes[i].min.x - ((playerSize.x + 0.5) / 2);
+              gameCamera.target.x = gameCamera.target.x + (previousCameraPositionBeforeConerFix - gameCamera.position.x);
+            } else if (xpCollsion) {
+              int previousCameraPositionBeforeConerFix = gameCamera.position.x;
+              gameCamera.position.x = worldBoxes[i].max.x + ((playerSize.x + 0.5) / 2);
+              gameCamera.target.x = gameCamera.target.x + (previousCameraPositionBeforeConerFix - gameCamera.position.x);
+            }
+          } else { // Sliding on Z
             xnCollsion = false;
             xpCollsion = false;
+            gameCamera.position.z = playerPreviousPosition.z;
+            gameCamera.target.z = playerTargetPreviousPosition.z;
+            if (znCollsion) {
+              int previousCameraPositionBeforeConerFix = gameCamera.position.z;
+              gameCamera.position.z = worldBoxes[i].min.z - ((playerSize.z + 0.5) / 2);
+              gameCamera.target.z = gameCamera.target.z + (previousCameraPositionBeforeConerFix - gameCamera.position.z);
+            } else if (zpCollsion) {
+              int previousCameraPositionBeforeConerFix = gameCamera.position.z;
+              gameCamera.position.z = worldBoxes[i].max.z + ((playerSize.z + 0.5) / 2);
+              gameCamera.target.z = gameCamera.target.z + (previousCameraPositionBeforeConerFix - gameCamera.position.z);
+            }
           }
-        }
-        
-        if (xnCollsion || xpCollsion) {
+        } else if (xnCollsion || xpCollsion) {
           gameCamera.position.x = playerPreviousPosition.x;
+          gameCamera.target.x = playerTargetPreviousPosition.x;
         } else if (znCollsion || zpCollsion) {
           gameCamera.position.z = playerPreviousPosition.z;
+          gameCamera.target.z = playerTargetPreviousPosition.z;
         }
       }
     }
