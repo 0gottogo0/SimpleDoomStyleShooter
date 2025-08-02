@@ -1,6 +1,6 @@
-Simple doom style shooter using raylib.
+Simple "doom"ish style shooter using raylib.
 
-Right now it is just a simple player controller, no enemies or shooting but I might plan on adding that in the future.
+Right now it is just a simple player controller with map generation and collision, no enemies or shooting but I might plan on adding that in the future.
 
 ## Dependencies:
 

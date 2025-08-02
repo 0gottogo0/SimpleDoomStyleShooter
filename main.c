@@ -31,13 +31,20 @@ bool xnCollision;
 bool xpCollision;
 bool znCollision;
 bool zpCollision;
-float CollsionDisX;
-float CollsionDisZ;
-
+float CollisionDisX;
+float CollisionDisZ;
 float gravity;
-int worldBoxAmount;
-int worldBoxSize;
-BoundingBox worldBoxes[50];
+
+// Keep all values as ints
+// Im watching .    .
+//            \______/
+Vector3 wallPosition[] = {{   5,   0,   5 },
+                          {  -5,   0,  -5 }};
+                        
+Vector3 wallSize[] =     {{   10, 12,   5 },
+                          {   1,  20,   1 }};
+
+BoundingBox wallBoundingBox[sizeof(wallPosition) / sizeof(wallPosition)[0]]; // sizeof returns the size of the array in bytes not elements
 
 int main(void) {
 
@@ -46,7 +53,7 @@ int main(void) {
 
   screenWidth = 1280;
   screenHeight = 960;
-  targetFPS = 165;
+  targetFPS = 165 ;
   SetExitKey(KEY_NULL);
   SetTargetFPS(targetFPS);
   InitWindow(screenWidth, screenHeight, "Simple Doom Style Shooter");
@@ -71,24 +78,14 @@ int main(void) {
   xpCollision = false;
   znCollision = false;
   zpCollision = false;
-  CollsionDisX = 0;
-  CollsionDisZ = 0;
+  CollisionDisX = 0;
+  CollisionDisZ = 0;
 
   gravity = 10;
-  worldBoxAmount = 50;
-  worldBoxSize = 10;
-  for (int i = 0; i < worldBoxAmount; i++) {
-    int x = 0;
-    int z = 0;
 
-    while (x > -worldBoxSize - 10 && x < worldBoxSize && z > -worldBoxSize - 10 && z < worldBoxSize) {
-      x = floor(GetRandomValue(-100, 100 - worldBoxSize));
-      z = floor(GetRandomValue(-100, 100 - worldBoxSize));
-    }
-
-    worldBoxes[i].min = (Vector3){ x, 0, z };
-
-    worldBoxes[i].max = (Vector3){ x + worldBoxSize, worldBoxSize, z + worldBoxSize };
+  for (int i = 0; i < sizeof(wallPosition) / sizeof(wallPosition)[0]; i++) {
+    wallBoundingBox[i].min = (Vector3){ wallPosition[i].x, wallPosition[i].y, wallPosition[i].z };
+    wallBoundingBox[i].max = (Vector3){ wallSize[i].x + wallPosition[i].x, wallSize[i].y + wallPosition[i].y, wallSize[i].z + wallPosition[i].z };
   }
 
   // Main game loop
@@ -127,39 +124,50 @@ int main(void) {
     znCollision = false;
     zpCollision = false;
 
-    for (int i = 0; i < worldBoxAmount; i++) {
-      if (CheckCollisionBoxes(playerBoundingBox, worldBoxes[i])) {
-        if (playerBoundingBox.min.x < worldBoxes[i].min.x) {
+    for (int i = 0; i < sizeof(wallPosition) / sizeof(wallPosition)[0]; i++) {
+      if (CheckCollisionBoxes(playerBoundingBox, wallBoundingBox[i])) {
+        if (playerBoundingBox.min.x < wallBoundingBox[i].min.x) {
           xnCollision = true;
         } 
         
-        if (playerBoundingBox.max.x > worldBoxes[i].max.x) {
+        if (playerBoundingBox.max.x > wallBoundingBox[i].max.x) {
           xpCollision = true;
         }
         
-        if (playerBoundingBox.min.z < worldBoxes[i].min.z) {
+        if (playerBoundingBox.min.z < wallBoundingBox[i].min.z) {
           znCollision = true;
         }
       
-        if (playerBoundingBox.max.z > worldBoxes[i].max.z) {
+        if (playerBoundingBox.max.z > wallBoundingBox[i].max.z) {
           zpCollision = true;
         }
 
         // Are we in a coner?
         if (xnCollision || xpCollision && znCollision || zpCollision) {
-          CollsionDisX = fabs(gameCamera.position.x - (worldBoxes[i].min.x + (worldBoxSize / 2)));
-          CollsionDisZ = fabs(gameCamera.position.z - (worldBoxes[i].min.z + (worldBoxSize / 2)));
-          float offset = 0.05;
+          
+          // Calculate weight
+          // This weight will be used later on to scale the distance to the center of the wall from the player
+          float xCollisionWeight = playerSize.x / wallSize[i].x;
+          float zCollisionWeight = playerSize.z / wallSize[i].z;
+
+          CollisionDisX = fabs(gameCamera.position.x - (wallBoundingBox[i].min.x + (wallSize[i].x / 2)));
+          CollisionDisZ = fabs(gameCamera.position.z - (wallBoundingBox[i].min.z + (wallSize[i].z / 2)));
+
+          // Apply weight
+          CollisionDisX = CollisionDisX * xCollisionWeight;
+          CollisionDisZ = CollisionDisZ * zCollisionWeight;
+
+          // This offset will sometimes make movement feel jittery but its better to have this happen then to have the player get stuck in the wall
+          float offset = 0.1;
 
           // Sliding on X
-          if (CollsionDisX > CollsionDisZ) {
+          if (CollisionDisX > CollisionDisZ) {
             znCollision = false;
             zpCollision = false;
             gameCamera.position.x = playerPreviousPosition.x;
             gameCamera.target.x = cameraTargetPreviousPosition.x;
             
             if (xnCollision) {
-              // Offset the player just slightly
               gameCamera.position.x -= offset;
               gameCamera.target.x -= offset;
             } else if (xpCollision) {
@@ -191,7 +199,7 @@ int main(void) {
     }
 
     // Resize bounding box around player
-    // We do this again after colisions
+    // We do this again after colisions because yes
     playerBoundingBox.min = (Vector3){
                             gameCamera.position.x - playerSize.x / 2,
                             gameCamera.position.y - playerSize.y + 0.5,
@@ -208,9 +216,9 @@ int main(void) {
 
     // Should we jump?
     // If so jump, otherwise figure out how gravity works again
-    if (IsPlayerJumping && playerBoundingBox.min.y < 0.0000001) {
+    if (IsPlayerJumping && playerBoundingBox.min.y == 0.0f) {
       playerYVel = playerYVel + playerJumpPower;
-    } else if (playerBoundingBox.min.y < 0.0000001) {
+    } else if (playerBoundingBox.min.y < 0.0f) {
       playerYVel = 0;
       gameCamera.position.y = 5.5;
     } else {
@@ -218,11 +226,12 @@ int main(void) {
     }
 
     // We can use this to know if the camera target has floated away
-    // and fix it accordingly by extending how far the target is
+    // And fix it accordingly by extending how far the target is
+    // This problem is mainly due to corner collision logic
     cameraTargetDistanceFromCamera = sqrtf(((gameCamera.position.x - gameCamera.target.x) * (gameCamera.position.x - gameCamera.target.x)) + ((gameCamera.position.z - gameCamera.target.z) * (gameCamera.position.z - gameCamera.target.z)));
     cameraAngle = atan2f(gameCamera.target.z - gameCamera.position.z, gameCamera.target.x - gameCamera.position.x);
     
-    // We use 7 and 13 here because 9 and 11 woudl get me canceled.
+    // We use 7 and 13 here because 9 and 11 would get me canceled
     // Also 7 and 13 are slightly smother
     if (cameraTargetDistanceFromCamera < 7 || cameraTargetDistanceFromCamera > 13) {
       gameCamera.target.x = gameCamera.position.x + cos(cameraAngle) * 10;
@@ -237,11 +246,11 @@ int main(void) {
       if (debug) {
         DrawBoundingBox(playerBoundingBox, LIME);
       }
-      for (int i = 0; i < worldBoxAmount; i++) {
+      for (int i = 0; i < sizeof(wallPosition) / sizeof(wallPosition)[0]; i++) {
         if (debug) {
-          DrawBoundingBox(worldBoxes[i], LIME);
+          DrawBoundingBox(wallBoundingBox[i], LIME);
         }
-        DrawCube((Vector3){ worldBoxes[i].min.x + worldBoxSize / 2, worldBoxSize / 2, worldBoxes[i].min.z + worldBoxSize / 2 }, worldBoxSize, worldBoxSize, worldBoxSize, LIGHTGRAY);
+        DrawCube((Vector3){ wallPosition[i].x + wallSize[i].x / 2, wallPosition[i].y + wallSize[i].y / 2, wallPosition[i].z + wallSize[i].z / 2 }, wallSize[i].x, wallSize[i].y, wallSize[i].z, LIGHTGRAY);
       }
       EndMode3D();
     if (debug) {
@@ -260,8 +269,8 @@ int main(void) {
       if (zpCollision) {
         DrawText("ZP", 130, 85, 25, RAYWHITE);
       }
-      DrawText(TextFormat("%0.2f", CollsionDisX), 10, 110, 25, RAYWHITE);
-      DrawText(TextFormat("%0.2f", CollsionDisZ), 10, 135, 25, RAYWHITE);
+      DrawText(TextFormat("%0.2f", CollisionDisX), 10, 110, 25, RAYWHITE);
+      DrawText(TextFormat("%0.2f", CollisionDisZ), 10, 135, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", gameCamera.position.x), 10, 160, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", gameCamera.position.z), 100, 160, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", gameCamera.target.x), 10, 185, 25, RAYWHITE);
