@@ -18,6 +18,7 @@ float playerSpeed;
 float playerWeight;
 float playerJumpPower;
 bool IsPlayerJumping;
+bool IsPlayerAirborn;
 float playerYVel;
 float playerRotateSpeed;
 Vector3 playerSize;
@@ -35,16 +36,31 @@ float CollisionDisX;
 float CollisionDisZ;
 float gravity;
 
-// Keep all values as ints
-// Im watching .    .
-//            \______/
-Vector3 wallPosition[] = {{   5,   0,   5 },
-                          {  -5,   0,  -5 }};
-                        
-Vector3 wallSize[] =     {{   10, 12,   5 },
-                          {   1,  20,   1 }};
+Vector3 wallPosition[] = {{    5,    0,    5 },
+                          {   -5,    0,   -5 }};
+  
+Vector3 wallSize[] =     {{   10,   12,    5 },
+                          {    1,   20,    1 }};
 
 BoundingBox wallBoundingBox[sizeof(wallPosition) / sizeof(wallPosition)[0]]; // sizeof returns the size of the array in bytes not elements
+
+Vector3 floorPosition[] = {{ -100,   -1, -100 },
+                           {   10,    0,   24 },
+                           {   10,    1,   23 },
+                           {   10,    2,   22 },
+                           {   10,    3,   21 },
+                           {   10,    4,   20 },
+                           {  -20,    6,  -20 }};
+
+Vector3 floorSize[] =     {{  200,    1,  200 },
+                           {    5,    1,    1 },
+                           {    5,    1,    1 },
+                           {    5,    1,    1 },
+                           {    5,    1,    1 },
+                           {    5,    1,    1 },
+                           {   10,    1,   10 }};
+
+BoundingBox floorBoundingBox[sizeof(floorPosition) / sizeof(floorPosition)[0]];
 
 int main(void) {
 
@@ -68,6 +84,7 @@ int main(void) {
   playerWeight = 4;
   playerJumpPower = 15;
   IsPlayerJumping = false;
+  IsPlayerAirborn = false;
   playerYVel = 0;
   playerRotateSpeed = 230;
   playerSize = (Vector3){ 2, 6, 2 };
@@ -88,6 +105,11 @@ int main(void) {
     wallBoundingBox[i].max = (Vector3){ wallSize[i].x + wallPosition[i].x, wallSize[i].y + wallPosition[i].y, wallSize[i].z + wallPosition[i].z };
   }
 
+  for (int i = 0; i < sizeof(floorPosition) / sizeof(floorPosition)[0]; i++) {
+    floorBoundingBox[i].min = (Vector3){ floorPosition[i].x, floorPosition[i].y, floorPosition[i].z };
+    floorBoundingBox[i].max = (Vector3){ floorSize[i].x + floorPosition[i].x, floorSize[i].y + floorPosition[i].y, floorSize[i].z + floorPosition[i].z };
+  }
+
   // Main game loop
   while (!WindowShouldClose()) {
     
@@ -96,7 +118,7 @@ int main(void) {
     fps = GetFPS();
 
     playerPreviousPosition = gameCamera.position;
-    cameraTargetPreviousPosition = gameCamera.target; // If the camera moves lets move the camera target too ;)
+    cameraTargetPreviousPosition = gameCamera.target; // If the camera moves move the camera target too
 
     UpdateCameraPro(&gameCamera,
                     (Vector3){(IsKeyDown(KEY_W) - IsKeyDown(KEY_S)) * (playerSpeed * deltaTime), 0, playerYVel * deltaTime },
@@ -144,7 +166,7 @@ int main(void) {
 
         // Are we in a coner?
         if (xnCollision || xpCollision && znCollision || zpCollision) {
-          
+
           // Calculate weight
           // This weight will be used later on to scale the distance to the center of the wall from the player
           float xCollisionWeight = playerSize.x / wallSize[i].x;
@@ -198,8 +220,40 @@ int main(void) {
       }
     }
 
+    // Set jump flag if space has been pressed
+    IsPlayerJumping = IsKeyDown(KEY_SPACE);
+
+    // Floor/celing collision detection
+    for (int i = 0; i < sizeof(floorPosition) / sizeof(floorPosition)[0]; i++) {
+      if (CheckCollisionBoxes(playerBoundingBox, floorBoundingBox[i])) {
+        IsPlayerAirborn = false;
+
+        // Are we above the floor?
+        if (playerBoundingBox.max.y > floorBoundingBox[i].max.y) {
+          if (IsPlayerJumping) {
+            playerYVel = playerJumpPower;
+          } else {
+            playerYVel = 0;
+            gameCamera.position.y = floorBoundingBox[i].max.y + (playerSize.y - 0.5);
+            gameCamera.target.y = floorBoundingBox[i].max.y + (playerSize.y - 0.5);
+          }
+        } else { // We are below the floor, we pretend the floor is a ceiling (no jumping)
+          playerYVel = 0;
+          gameCamera.position.y = playerPreviousPosition.y;
+          gameCamera.target.y = cameraTargetPreviousPosition.y;
+        }
+      } else {
+        IsPlayerAirborn = true;
+      }
+    }
+
+    // Gravity
+    if (IsPlayerAirborn) {
+      playerYVel = playerYVel - (gravity * deltaTime) * playerWeight;
+    }
+
     // Resize bounding box around player
-    // We do this again after colisions because yes
+    // We do this again after colisions to see with debug wireframe things
     playerBoundingBox.min = (Vector3){
                             gameCamera.position.x - playerSize.x / 2,
                             gameCamera.position.y - playerSize.y + 0.5,
@@ -209,21 +263,6 @@ int main(void) {
                             gameCamera.position.x + playerSize.x / 2,
                             gameCamera.position.y + 0.5,
                             gameCamera.position.z + playerSize.z / 2 };
-
-
-    // Set jump flag if space has been pressed
-    IsPlayerJumping = IsKeyDown(KEY_SPACE);
-
-    // Should we jump?
-    // If so jump, otherwise figure out how gravity works again
-    if (IsPlayerJumping && playerBoundingBox.min.y == 0.0f) {
-      playerYVel = playerYVel + playerJumpPower;
-    } else if (playerBoundingBox.min.y < 0.0f) {
-      playerYVel = 0;
-      gameCamera.position.y = 5.5;
-    } else {
-      playerYVel = playerYVel - (gravity * deltaTime) * playerWeight;
-    }
 
     // We can use this to know if the camera target has floated away
     // And fix it accordingly by extending how far the target is
@@ -242,33 +281,26 @@ int main(void) {
     BeginDrawing();
     ClearBackground(SKYBLUE);
       BeginMode3D(gameCamera);
-      DrawPlane((Vector3){ 0, 0, 0 }, (Vector2){ 200, 200 }, GRAY);
-      if (debug) {
-        DrawBoundingBox(playerBoundingBox, LIME);
-      }
+      if (debug) {DrawBoundingBox(playerBoundingBox, LIME);}
       for (int i = 0; i < sizeof(wallPosition) / sizeof(wallPosition)[0]; i++) {
-        if (debug) {
-          DrawBoundingBox(wallBoundingBox[i], LIME);
-        }
         DrawCube((Vector3){ wallPosition[i].x + wallSize[i].x / 2, wallPosition[i].y + wallSize[i].y / 2, wallPosition[i].z + wallSize[i].z / 2 }, wallSize[i].x, wallSize[i].y, wallSize[i].z, LIGHTGRAY);
+        if (debug) {DrawBoundingBox(wallBoundingBox[i], LIME);}
+      }
+      DrawCube((Vector3){ floorPosition[0].x + floorSize[0].x / 2, floorPosition[0].y + floorSize[0].y / 2, floorPosition[0].z + floorSize[0].z / 2 }, floorSize[0].x, floorSize[0].y, floorSize[0].z, GRAY);
+      if (debug) {DrawBoundingBox(floorBoundingBox[0], LIME);}
+      for (int i = 1; i < sizeof(floorPosition) / sizeof(floorPosition)[0]; i++) {
+        DrawCube((Vector3){ floorPosition[i].x + floorSize[i].x / 2, floorPosition[i].y + floorSize[i].y / 2, floorPosition[i].z + floorSize[i].z / 2 }, floorSize[i].x, floorSize[i].y, floorSize[i].z, BEIGE);
+        if (debug) {DrawBoundingBox(floorBoundingBox[i], LIME);}
       }
       EndMode3D();
     if (debug) {
       DrawText(TextFormat("%d", fps), 10, 10, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", playerYVel), 10, 35, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", playerBoundingBox.min.y), 10, 60, 25, RAYWHITE);
-      if (xnCollision) {
-        DrawText("XN", 10, 85, 25, RAYWHITE);
-      }
-      if (xpCollision) {
-        DrawText("XP", 50, 85, 25, RAYWHITE);
-      }
-      if (znCollision) {
-        DrawText("ZN", 90, 85, 25, RAYWHITE);
-      }
-      if (zpCollision) {
-        DrawText("ZP", 130, 85, 25, RAYWHITE);
-      }
+      if (xnCollision) {DrawText("XN", 10, 85, 25, RAYWHITE);}
+      if (xpCollision) {DrawText("XP", 50, 85, 25, RAYWHITE);}
+      if (znCollision) {DrawText("ZN", 90, 85, 25, RAYWHITE);}
+      if (zpCollision) {DrawText("ZP", 130, 85, 25, RAYWHITE);}
       DrawText(TextFormat("%0.2f", CollisionDisX), 10, 110, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", CollisionDisZ), 10, 135, 25, RAYWHITE);
       DrawText(TextFormat("%0.2f", gameCamera.position.x), 10, 160, 25, RAYWHITE);
